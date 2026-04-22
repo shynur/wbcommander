@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -145,6 +146,50 @@ func TestFormatHelpers(t *testing.T) {
 	when := time.Date(2026, time.April, 22, 13, 5, 9, 0, time.UTC)
 	if got := formatModifiedTime(when); got != "2026年 4月22日  1:05:09 PM" {
 		t.Fatalf("formatModifiedTime got %q", got)
+	}
+}
+
+func TestConfigureCLIDefaultDirectory(t *testing.T) {
+	fs := flag.NewFlagSet("wbcommander", flag.ContinueOnError)
+	var output bytes.Buffer
+	fs.SetOutput(&output)
+
+	var port requiredIntFlag
+	publicDir, httpsDir := configureCLI(fs, "wbcommander", &port)
+
+	if err := fs.Parse([]string{"-p", "8443"}); err != nil {
+		t.Fatalf("parse flags: %v", err)
+	}
+
+	if !port.set || port.value != 8443 {
+		t.Fatalf("unexpected port: set=%v value=%d", port.set, port.value)
+	}
+	if got := *publicDir; got != "." {
+		t.Fatalf("unexpected default public dir: %q", got)
+	}
+	if got := *httpsDir; got != "" {
+		t.Fatalf("unexpected default https dir: %q", got)
+	}
+}
+
+func TestConfigureCLIUsage(t *testing.T) {
+	fs := flag.NewFlagSet("wbcommander", flag.ContinueOnError)
+	var output bytes.Buffer
+	fs.SetOutput(&output)
+
+	var port requiredIntFlag
+	configureCLI(fs, "wbcommander", &port)
+	fs.Usage()
+
+	got := output.String()
+	for _, want := range []string{
+		"用法: wbcommander -p PORT [-d PUBLIC_DIRECTORY] [-s HTTPS_DIRECTORY]",
+		"-d PUBLIC_DIRECTORY",
+		"默认为当前目录",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("usage missing %q:\n%s", want, got)
+		}
 	}
 }
 

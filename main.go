@@ -418,24 +418,6 @@ type commitRequest struct {
 	SessionID string `json:"sessionId"`
 }
 
-type requiredStringFlag struct {
-	value string
-	set   bool
-}
-
-func (f *requiredStringFlag) String() string {
-	if !f.set {
-		return ""
-	}
-	return f.value
-}
-
-func (f *requiredStringFlag) Set(value string) error {
-	f.value = value
-	f.set = true
-	return nil
-}
-
 type requiredIntFlag struct {
 	value int
 	set   bool
@@ -458,26 +440,27 @@ func (f *requiredIntFlag) Set(value string) error {
 	return nil
 }
 
+func configureCLI(fs *flag.FlagSet, programName string, port *requiredIntFlag) (publicDir *string, httpsDir *string) {
+	fs.Var(port, "p", "TCP `PORT`")
+	publicDir = fs.String("d", ".", "要发布的 `PUBLIC_DIRECTORY`，默认为当前目录")
+	httpsDir = fs.String("s", "", "使用 `HTTPS_DIRECTORY` 下的证书")
+	fs.Usage = func() {
+		out := fs.Output()
+		fmt.Fprintf(out, "用法: %s -p PORT [-d PUBLIC_DIRECTORY] [-s HTTPS_DIRECTORY]\n", programName)
+		fmt.Fprintln(out)
+		fs.PrintDefaults()
+	}
+	return publicDir, httpsDir
+}
+
 func main() {
 	log.SetFlags(0)
 
 	var port requiredIntFlag
-	var publicDir requiredStringFlag
-	flag.Var(&port, "p", "TCP `PORT`")
-	flag.Var(&publicDir, "d", "要发布的 `PUBLIC_DIRECTORY`")
-	httpsDir := flag.String("s", "", "使用 `HTTPS_DIRECTORY` 下的证书")
-	flag.Usage = func() {
-		out := flag.CommandLine.Output()
-		fmt.Fprintf(out, "用法: %s -p PORT -d PUBLIC_DIRECTORY [-s HTTPS_DIRECTORY]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintln(out)
-		flag.PrintDefaults()
-	}
+	publicDir, httpsDir := configureCLI(flag.CommandLine, filepath.Base(os.Args[0]), &port)
 	flag.Parse()
 
 	var missing []string
-	if !publicDir.set || publicDir.value == "" {
-		missing = append(missing, "-d")
-	}
 	if !port.set {
 		missing = append(missing, "-p")
 	}
@@ -490,7 +473,12 @@ func main() {
 		log.Fatalf("无效端口: %d", port.value)
 	}
 
-	root, err := filepath.Abs(publicDir.value)
+	rootDir := *publicDir
+	if rootDir == "" {
+		rootDir = "."
+	}
+
+	root, err := filepath.Abs(rootDir)
 	if err != nil {
 		log.Fatalf("解析目录失败: %v", err)
 	}
