@@ -125,8 +125,11 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!DOCTYPE html>
     .diff-text {
       grid-column: 1 / -1;
       margin: 0;
-      white-space: pre-wrap;
       line-height: 1.5;
+    }
+    .diff-list {
+      margin: 0.35rem 0 0;
+      padding-left: 1.4rem;
     }
     .diff-confirm {
       position: absolute;
@@ -169,7 +172,10 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!DOCTYPE html>
       </button>
       <div id="diffRow" class="row diff-row hidden">
         <button id="confirmButton" class="diff-confirm" type="button">✅</button>
-        <pre id="diffText" class="diff-text"></pre>
+        <div class="diff-text">
+          <div>以下文件会被覆盖:</div>
+          <ul id="diffList" class="diff-list"></ul>
+        </div>
       </div>
     </div>
   </main>
@@ -179,23 +185,23 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!DOCTYPE html>
       const uploadRow = document.getElementById('uploadRow');
       const fileInput = document.getElementById('fileInput');
       const diffRow = document.getElementById('diffRow');
-      const diffText = document.getElementById('diffText');
+      const diffList = document.getElementById('diffList');
       const confirmButton = document.getElementById('confirmButton');
       let pendingSessionId = '';
 
       const showDiff = (paths, sessionId) => {
         pendingSessionId = sessionId;
-        const lines = ['以下文件会被覆盖:'];
         for (const item of paths) {
-          lines.push('  - ' + item);
+          const li = document.createElement('li');
+          li.textContent = item;
+          diffList.appendChild(li);
         }
-        diffText.textContent = lines.join('\n');
         diffRow.classList.remove('hidden');
       };
 
       const hideDiff = () => {
         pendingSessionId = '';
-        diffText.textContent = '';
+        diffList.textContent = '';
         diffRow.classList.add('hidden');
       };
 
