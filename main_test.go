@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -80,6 +84,54 @@ func TestApplyStage(t *testing.T) {
 	assertFileContent(t, filepath.Join(target, "dir-to-file"), "flat")
 	assertFileContent(t, filepath.Join(target, "merge", "old.txt"), "old")
 	assertFileContent(t, filepath.Join(target, "merge", "new.txt"), "new")
+}
+
+func TestHandleBrowseServesIndexHTMLAsFile(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "index.html"), "<!doctype html><h1>remote</h1>")
+
+	srv := &server{root: root}
+	request := httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	response := httptest.NewRecorder()
+
+	srv.handleBrowse(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	if contentType := response.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("expected text/plain content type, got %q", contentType)
+	}
+	if nosniff := response.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+		t.Fatalf("expected nosniff header, got %q", nosniff)
+	}
+	if body := response.Body.String(); !strings.Contains(body, "<!doctype html><h1>remote</h1>") {
+		t.Fatalf("expected index.html content, got %q", body)
+	}
+}
+
+func TestHandleBrowseDoesNotForceBinaryToText(t *testing.T) {
+	root := t.TempDir()
+	binaryPath := filepath.Join(root, "image.bin")
+	if err := os.WriteFile(binaryPath, []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0x01}, 0o644); err != nil {
+		t.Fatalf("write binary file: %v", err)
+	}
+
+	srv := &server{root: root}
+	request := httptest.NewRequest(http.MethodGet, "/image.bin", nil)
+	response := httptest.NewRecorder()
+
+	srv.handleBrowse(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	if contentType := response.Header().Get("Content-Type"); strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("expected non-text content type, got %q", contentType)
+	}
+	if !bytes.Equal(response.Body.Bytes(), []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0x01}) {
+		t.Fatalf("unexpected binary body: %#v", response.Body.Bytes())
+	}
 }
 
 func TestFormatHelpers(t *testing.T) {

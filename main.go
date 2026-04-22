@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -618,7 +619,67 @@ func (s *server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, encodedPath(rel, false), http.StatusMovedPermanently)
 		return
 	}
-	http.ServeFile(w, r, abs)
+	servePlainFile(w, r, abs, info)
+}
+
+func servePlainFile(w http.ResponseWriter, r *http.Request, filePath string, info os.FileInfo) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if isTextFile(filePath, file) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
+func isTextFile(filePath string, file *os.File) bool {
+	if isTextExtension(filepath.Ext(filePath)) {
+		return true
+	}
+
+	buffer := make([]byte, 8192)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return false
+	}
+	return isTextSample(buffer[:n])
+}
+
+func isTextExtension(ext string) bool {
+	switch strings.ToLower(ext) {
+	case ".bat", ".c", ".cc", ".cfg", ".conf", ".cpp", ".cs", ".css", ".csv", ".go", ".h", ".hpp", ".htm", ".html", ".ini", ".java", ".js", ".json", ".jsx", ".log", ".lua", ".md", ".mjs", ".py", ".rb", ".rs", ".sh", ".sql", ".svg", ".toml", ".ts", ".tsx", ".txt", ".xml", ".yaml", ".yml":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTextSample(sample []byte) bool {
+	if len(sample) == 0 {
+		return true
+	}
+	if !utf8.Valid(sample) {
+		return false
+	}
+	for _, b := range sample {
+		if b == 0 {
+			return false
+		}
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' && b != '\f' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *server) renderDirectory(w http.ResponseWriter, r *http.Request, rel, abs string) {
