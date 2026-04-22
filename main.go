@@ -197,12 +197,25 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!DOCTYPE html>
           diffList.appendChild(li);
         }
         diffRow.classList.remove('hidden');
+        requestAnimationFrame(scrollForDiff);
       };
 
       const hideDiff = () => {
         pendingSessionId = '';
         diffList.textContent = '';
         diffRow.classList.add('hidden');
+      };
+
+      const scrollForDiff = () => {
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const uploadRect = uploadRow.getBoundingClientRect();
+        const diffRect = diffRow.getBoundingClientRect();
+        const maxDown = Math.max(0, uploadRect.top);
+        const needDown = Math.max(0, diffRect.bottom - viewportHeight);
+        const delta = Math.min(maxDown, needDown);
+        if (delta > 0) {
+          window.scrollBy({ top: delta, behavior: 'smooth' });
+        }
       };
 
       const uploadItems = async (payload) => {
